@@ -56,14 +56,13 @@
   .trow:hover { background-color:rgba(184,247,255,0.07) !important; box-shadow:inset 0 0 0 1px rgba(184,247,255,0.16); }
   .trow:hover::before { opacity:1; transform:scaleY(1); }
   .trow:active { transform:scale(0.995); }
-  /* prilepená hlavička sadá POD stavovú lištu iPadu (hodiny, batéria), nie pod ňu */
-  .thead { position:sticky; top:calc(env(safe-area-inset-top) + 6px); z-index:5;
+  /* prilepená hlavička sadne tesne pod stavovú lištu iPadu */
+  .thead { position:sticky; top:env(safe-area-inset-top); z-index:5;
     backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px);
-    background:rgba(20,20,20,0.94); box-shadow:0 8px 18px rgba(0,0,0,0.5); border-radius:10px; }
-  /* clona nad hlavičkou — zakryje riadky, ktoré by inak prešli popod stavovú lištu */
-  .thead::after { content:""; position:absolute; left:0; right:0; bottom:100%;
-    height:calc(env(safe-area-inset-top) + 120px); background:#121212;
-    box-shadow:0 0 0 100vmax #121212; clip-path:inset(0); pointer-events:none; }
+    background:rgba(20,20,20,0.94); box-shadow:0 8px 18px rgba(0,0,0,0.5); }
+  /* tenký prúžok presne vo výške stavovej lišty — riadky pod ňou nepresvitajú */
+  .statusveil { position:fixed; top:0; left:0; right:0; height:env(safe-area-inset-top);
+    background:#161616; z-index:6; pointer-events:none; }
   .icobtn { transition: transform 140ms cubic-bezier(.2,.8,.2,1), color 160ms ease, opacity 160ms ease, background 160ms ease; }
   .icobtn:not(:disabled):hover { transform:translateY(-1px); color:#B8F7FF; }
   .icobtn:not(:disabled):active { transform:scale(0.88); }
@@ -90,7 +89,7 @@
 const { useState, useEffect, useMemo, useRef } = React;
 
 /* ---------- MB JOURNAL · týždenná kniha obchodov ---------- */
-const APP_VERSION = "2026-07-24.8"; // pri každom update na GitHube zvýš
+const APP_VERSION = "2026-07-24.9"; // pri každom update na GitHube zvýš
 const STORAGE_KEY = "mb-journal-v1"; // nikdy nemeniť — dáta sú pod týmto kľúčom
 
 const P = {
@@ -808,8 +807,8 @@ const App = () => {
 
   /* ---------- tabuľka týždňa — ako Numbers ---------- */
   const HeadCell = ({ children, right, center, sep }) => (
-    <div style={{ fontSize:13.5, fontWeight:750, textTransform:"uppercase", letterSpacing:"0.08em",
-      color:P.dim, fontFamily:SANS, textAlign: center?"center":right?"right":"left", padding:"0 2px",
+    <div style={{ fontSize:12.5, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em",
+      color:P.faint, fontFamily:SANS, textAlign: center?"center":right?"right":"left", padding:"0 2px",
       whiteSpace:"nowrap", ...(sep?SEP:{}) }}>{children}</div>
   );
 
@@ -820,7 +819,7 @@ const App = () => {
         <div style={{ minWidth: GRID_MIN }}>
           {/* hlavička stĺpcov — ako riadok 6 v tabuľke */}
           <div className="thead" style={{ display:"grid", gridTemplateColumns:GRID, gap:8, alignItems:"center",
-            padding:"15px 12px 14px", borderBottom:`2px solid rgba(0,121,152,0.55)` }}>
+            padding:"12px 12px 11px", borderBottom:`2px solid rgba(0,121,152,0.55)` }}>
             <HeadCell>Dátum</HeadCell><HeadCell>Nástroj</HeadCell><HeadCell center sep>Spustené</HeadCell><HeadCell center sep>Výsledok</HeadCell>
             <HeadCell center sep>Smer</HeadCell><HeadCell right>Poznámka</HeadCell><HeadCell right>SL</HeadCell><HeadCell right>RR</HeadCell><HeadCell right>Zisk / Strata</HeadCell><HeadCell right>%</HeadCell>
           </div>
@@ -924,6 +923,7 @@ const App = () => {
   return (
     <div>
       <Background />
+      <div className="statusveil" />
       <div className="scrollpane" style={{ paddingBottom:190, fontFamily:SANS }}>
         {/* hlavička */}
         <div style={{ padding:"max(24px, env(safe-area-inset-top)) 16px 10px" }}>
