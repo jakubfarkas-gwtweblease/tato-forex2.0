@@ -16,7 +16,9 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color: transparent; }
-  html, body { margin:0; padding:0; min-height:100%; width:100%; max-width:100%; overflow-x:hidden; }
+  html, body { margin:0; padding:0; min-height:100%; width:100%; }
+  /* vodorovný scroll rieši stránka, nie vnútorný box — inak by sticky hlavička nedržala */
+  body { overflow-x:auto; }
   /* Pozadie maľuje HTML, nie body — pokryje aj hornú/dolnú safe-area a overscroll,
      takže dole nezostáva žiadny pás. */
   html {
@@ -82,7 +84,7 @@
 const { useState, useEffect, useMemo, useRef } = React;
 
 /* ---------- MB JOURNAL · týždenná kniha obchodov ---------- */
-const APP_VERSION = "2026-07-24.6"; // pri každom update na GitHube zvýš
+const APP_VERSION = "2026-07-24.7"; // pri každom update na GitHube zvýš
 const STORAGE_KEY = "mb-journal-v1"; // nikdy nemeniť — dáta sú pod týmto kľúčom
 
 const P = {
@@ -105,7 +107,7 @@ const PAIRS = ["SPX","NDX","DAX","Brent","XAU","EUR","GBP","JPY"];
 
 /* stĺpce tabuľky — ako v Numbers: Dátum | Nástroj | Spustené | Výsledok | Pozn | RR | Zisk/Strata | % */
 /* Dátum | Nástroj | Spustené | Výsledok | Smer | Poznámka | RR | Zisk/Strata | % */
-const GRID = "88px 104px 96px 96px 96px minmax(160px,1fr) 96px 76px 148px 92px";
+const GRID = "88px 104px 96px 96px 96px minmax(160px,1fr) 92px 82px 164px 96px";
 /* jemný zvislý oddeľovník pre stĺpce Spustené / Výsledok / Smer */
 const SEP = { borderLeft:"1px solid rgba(255,255,255,0.09)" };
 const GRID_MIN = 1080; // px — pod touto šírkou sa tabuľka posúva horizontálne (iPad na šírku bez posunu)
@@ -180,6 +182,7 @@ const weekStats = (state, monday) => {
   const closed = fired.filter(t => t.vysledok === 1 || t.vysledok === 0);
   const wins = closed.filter(t => t.vysledok === 1);
   const rrs = trades.map(rrOf).filter(v => v != null);
+  const sls = trades.map(t => t.sl).filter(v => v != null && v > 0);
   const sum = trades.reduce((a,t) => a + (t.pnl ?? 0), 0);
   const sb = weekStartBalance(state, monday);
   return {
@@ -190,6 +193,7 @@ const weekStats = (state, monday) => {
     firedPct: decided.length ? fired.length / decided.length : null,
     winRate: closed.length ? wins.length / closed.length : null,
     avgRR: rrs.length ? rrs.reduce((a,b)=>a+b,0)/rrs.length : null,
+    slSum: sls.length ? sls.reduce((a,b)=>a+b,0) : null,
     nFired: fired.length, nDecided: decided.length, nWins: wins.length, nClosed: closed.length,
     fromStartPct: state.start ? (sb.val + sum - state.start) / state.start : null,
   };
@@ -203,6 +207,7 @@ const totalStats = (state) => {
   const closed = fired.filter(t => t.vysledok === 1 || t.vysledok === 0);
   const wins = closed.filter(t => t.vysledok === 1);
   const rrs = all.map(rrOf).filter(v => v != null);
+  const slsAll = all.map(t => t.sl).filter(v => v != null && v > 0);
   const sum = all.reduce((a,t) => a + (t.pnl ?? 0), 0);
   const mondays = [...new Set(all.map(t => mondayOf(t.date)).concat(Object.keys(state.balances)))].sort();
   let curBal = state.start;
@@ -214,6 +219,7 @@ const totalStats = (state) => {
     winRate: closed.length ? wins.length/closed.length : null,
     avgRR: rrs.length ? rrs.reduce((a,b)=>a+b,0)/rrs.length : null,
     sum, curBal,
+    slSum: slsAll.length ? slsAll.reduce((a,b)=>a+b,0) : null,
     fromStart: state.start ? (curBal - state.start)/state.start : null,
     equity, weeks: mondays.length,
   };
@@ -709,6 +715,7 @@ const App = () => {
             <StatTile i={3} label="Win rate" color={(ws.winRate??0)>=0.5?P.ice:P.loss} value={ws.winRate==null?"—":fmtPct(ws.winRate,1,false)} sub={`${ws.nWins}/${ws.nClosed} uzavretých`} />
             <StatTile i={4} label="Priemerné RR" value={ws.avgRR==null?"—":fmtRR(ws.avgRR)} sub="plánované" />
             <StatTile i={5} label="Záznamy" value={ws.trades.length} sub={`${ws.nFired} spustených`} />
+            <StatTile i={6} label="Risk spolu" value={ws.slSum==null?"—":fmt$(ws.slSum)} sub="súčet SL za týždeň" />
           </div>
           <div style={{ display:"flex", justifyContent:"flex-end", alignItems:"center", gap:12, marginTop:6, paddingBottom:8 }}>
             <div style={{ textAlign:"right" }}>
@@ -758,6 +765,7 @@ const App = () => {
           <StatTile i={3} label="Win rate" color={(tot.winRate??0)>=0.5?P.ice:P.loss} value={tot.winRate==null?"—":fmtPct(tot.winRate,1,false)} sub={`${tot.nWins}/${tot.nClosed} uzavretých`} />
           <StatTile i={4} label="Priemerné RR" value={tot.avgRR==null?"—":fmtRR(tot.avgRR)} sub="plánované" />
           <StatTile i={5} label="Záznamy" value={tot.n} sub={`${tot.weeks} týždňov`} />
+          <StatTile i={6} label="Risk spolu" value={tot.slSum==null?"—":fmt$(tot.slSum)} sub="súčet všetkých SL" />
         </div>
         <p style={{ fontSize:13, textAlign:"center", color:P.faint }}>
           Win rate len z uzavretých spustených obchodov.
@@ -802,7 +810,7 @@ const App = () => {
   const renderTable = () => {
     let lastDate = null;
     return (
-      <div style={{ overflowX:"auto", WebkitOverflowScrolling:"touch", margin:"0 -16px", padding:"0 16px" }}>
+      <div style={{ margin:"0 -16px", padding:"0 16px" }}>
         <div style={{ minWidth: GRID_MIN }}>
           {/* hlavička stĺpcov — ako riadok 6 v tabuľke */}
           <div className="thead" style={{ display:"grid", gridTemplateColumns:GRID, gap:8, alignItems:"center",
@@ -887,15 +895,18 @@ const App = () => {
                 <div style={{ fontFamily:MONO, fontSize:16.5, fontWeight:800, textAlign:"center", whiteSpace:"nowrap", color:P.text }}>{ws.firedPct==null?"—":fmtPct(ws.firedPct,1,false)}</div>
                 <div style={{ fontFamily:MONO, fontSize:16.5, fontWeight:800, textAlign:"center", whiteSpace:"nowrap", color:(ws.winRate??0)>=0.5?P.win:P.loss }}>{ws.winRate==null?"—":fmtPct(ws.winRate,1,false)}</div>
                 <div style={{ gridColumn:"span 2" }}></div>
+                <div style={{ fontFamily:MONO, fontSize:16.5, fontWeight:800, textAlign:"right", whiteSpace:"nowrap", color:P.dim }}>{ws.slSum==null?"":fmt$(ws.slSum).replace(" $","")}</div>
                 <div style={{ fontFamily:MONO, fontSize:16.5, fontWeight:800, textAlign:"right", whiteSpace:"nowrap", color:P.dim }}>{ws.avgRR==null?"—":fmtRR(ws.avgRR)}</div>
                 <div style={{ fontFamily:MONO, fontSize:17, fontWeight:800, textAlign:"right", whiteSpace:"nowrap", color: ws.sum>=0?P.ice:P.loss,
                   textShadow: ws.sum>0?"0 0 12px rgba(184,247,255,0.4)":"none" }}>{fmt$(ws.sum, true)}</div>
                 <div style={{ fontFamily:MONO, fontSize:15.5, fontWeight:800, textAlign:"right", whiteSpace:"nowrap", color: (ws.weekPct??0)>=0?P.win:P.loss }}>{fmtPct(ws.weekPct,1)}</div>
               </div>
               <div className="rise" style={{ "--i":11, display:"grid", gridTemplateColumns:GRID, gap:8, alignItems:"center", padding:"4px 12px 14px" }}>
-                <div style={{ gridColumn:"1 / span 7", fontSize:14, color:P.faint, fontFamily:SANS }}>Koniec týždňa · od štartu účtu →</div>
-                <div style={{ fontFamily:MONO, fontSize:17, fontWeight:800, textAlign:"right", color:P.text }}>{fmt$(ws.endBal)}</div>
-                <div style={{ fontFamily:MONO, fontSize:15.5, fontWeight:800, textAlign:"right", color:(ws.fromStartPct??0)>=0?P.win:P.loss }}>{fmtPct(ws.fromStartPct,1)}</div>
+                <div style={{ gridColumn:"1 / span 6", fontSize:14, color:P.faint, fontFamily:SANS, whiteSpace:"nowrap" }}>Koniec týždňa · od štartu účtu →</div>
+                <div style={{ fontSize:12, color:P.faint, fontFamily:SANS, textAlign:"right", whiteSpace:"nowrap" }}>risk spolu</div>
+                <div></div>
+                <div style={{ fontFamily:MONO, fontSize:17, fontWeight:800, textAlign:"right", whiteSpace:"nowrap", color:P.text }}>{fmt$(ws.endBal)}</div>
+                <div style={{ fontFamily:MONO, fontSize:15.5, fontWeight:800, textAlign:"right", whiteSpace:"nowrap", color:(ws.fromStartPct??0)>=0?P.win:P.loss }}>{fmtPct(ws.fromStartPct,1)}</div>
               </div>
             </React.Fragment>
           )}
